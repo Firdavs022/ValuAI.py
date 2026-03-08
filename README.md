@@ -1,24 +1,18 @@
 import asyncio
 import logging
-import os
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from aiogram.client.session.aiohttp import AiohttpSession
 
-TOKEN = "8622495139:AAHGrAbMgSkDVr6_DZPDPl7V3n0jCZOHRl8" 
+# 1. SOZLAMALAR
+# Render va Koyeb serverlarida proxy kerak emas, Telegram bloklanmagan.
+TOKEN = "8622495139:AAHGrAbMgSkDVr6_DZPDPl7V3n0jCZOHRl8"
 
-if os.environ.get('PYTHONANYWHERE_DOMAIN'):
-    session = AiohttpSession(proxy="http://proxy.server:3128")
-    bot = Bot(token=TOKEN, session=session)
-    print("LOG: Serverda (Proxy bilan) ishga tushdi.")
-else:
-    bot = Bot(token=TOKEN)
-    print("LOG: Lokal kompyuterda (Proxysiz) ishga tushdi.")
-
+bot = Bot(token=TOKEN)
 dp = Dispatcher()
 user_sessions = {}
 
+# 2. KO'P TILLI XABARLAR
 MESSAGES = {
     "uz": {
         "welcome": "🚀 ValuAI ga xush kelibsiz! Sohaga tegishli tugmani bosing:",
@@ -50,6 +44,7 @@ MESSAGES = {
     }
 }
 
+# 3. HANDLERLAR
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     builder = InlineKeyboardBuilder()
@@ -111,20 +106,26 @@ async def final_step(call: types.CallbackQuery):
     data = user_sessions[uid]
     lang = data["lang"]
     
+    # Baholash mantiqi
     mult = 12 if data["industry"] == "AI / ML" else 8
-    val = (data["revenue"] * 12) * mult * (1 + data["growth"]/100)
+    val = (data["revenue"] * 12) * mult * (1 + data.get("growth", 0)/100)
     low, high = round(val * 0.8), round(val * 1.2)
     
     res = MESSAGES[lang]["result"].format(
-        ind=data["industry"], stage=stage, growth=data["growth"], 
+        ind=data["industry"], stage=stage, growth=data.get("growth", 0), 
         low=low, high=high
     )
     await call.message.edit_text(res, parse_mode="Markdown")
     del user_sessions[uid]
 
+# 4. ISHGA TUSHIRISH
 async def main():
     logging.basicConfig(level=logging.INFO)
+    print("LOG: Bot Render/Koyeb serverida (Proxysiz) ishga tushdi.")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        pass
