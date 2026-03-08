@@ -1,18 +1,18 @@
 import asyncio
 import logging
+import os
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiohttp import web
 
 # 1. SOZLAMALAR
-# Render va Koyeb serverlarida proxy kerak emas, Telegram bloklanmagan.
 TOKEN = "8622495139:AAHGrAbMgSkDVr6_DZPDPl7V3n0jCZOHRl8"
-
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 user_sessions = {}
 
-# 2. KO'P TILLI XABARLAR
+# 2. XABARLAR (UZ, RU, EN, TR)
 MESSAGES = {
     "uz": {
         "welcome": "🚀 ValuAI ga xush kelibsiz! Sohaga tegishli tugmani bosing:",
@@ -106,7 +106,6 @@ async def final_step(call: types.CallbackQuery):
     data = user_sessions[uid]
     lang = data["lang"]
     
-    # Baholash mantiqi
     mult = 12 if data["industry"] == "AI / ML" else 8
     val = (data["revenue"] * 12) * mult * (1 + data.get("growth", 0)/100)
     low, high = round(val * 0.8), round(val * 1.2)
@@ -118,11 +117,31 @@ async def final_step(call: types.CallbackQuery):
     await call.message.edit_text(res, parse_mode="Markdown")
     del user_sessions[uid]
 
-# 4. ISHGA TUSHIRISH
-async def main():
+# 4. RENDER UCHUN SOXTA SERVER (Health Check)
+async def handle(request):
+    return web.Response(text="Bot is running!")
+
+# 5. ASOSIY ISHGA TUSHIRISH
+async def run_bot():
     logging.basicConfig(level=logging.INFO)
-    print("LOG: Bot Render/Koyeb serverida (Proxysiz) ishga tushdi.")
+    print("LOG: Bot Telegram polling rejimida ishga tushdi.")
     await dp.start_polling(bot)
+
+async def main():
+    # Render kutayotgan portni ochamiz
+    app = web.Application()
+    app.router.add_get("/", handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    
+    port = os.environ.get("PORT", "10000")
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    
+    # Bot va Serverni bir vaqtda yurgizamiz
+    await asyncio.gather(
+        step1 := site.start(),
+        step2 := run_bot()
+    )
 
 if __name__ == "__main__":
     try:
