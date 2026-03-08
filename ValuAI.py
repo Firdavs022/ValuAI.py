@@ -53,7 +53,7 @@ async def cmd_start(message: types.Message):
     builder.button(text="🇺🇸 English", callback_data="lang_en")
     builder.button(text="🇹🇷 Türkçe", callback_data="lang_tr")
     builder.adjust(2)
-    await message.answer("ValuAI: Choose language / Dilni tanlang:", reply_markup=builder.as_markup())
+    await message.answer("ValuAI: Choose language / Tilni tanlang:", reply_markup=builder.as_markup())
 
 @dp.callback_query(F.data.startswith("lang_"))
 async def language_chosen(call: types.CallbackQuery):
