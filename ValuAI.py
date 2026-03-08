@@ -13,14 +13,13 @@ TOKEN = "8622495139:AAHGrAbMgSkDVr6_DZPDPl7V3n0jCZOHRl8"
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# Bot adashib ketmasligi uchun holatlar zanjiri
+# Holatlar zanjiri
 class ValuationState(StatesGroup):
-    choosing_lang = State()
     choosing_industry = State()
     entering_revenue = State()
     entering_growth = State()
 
-# --- MATNLAR VA MA'LUMOTLAR ---
+# --- MATNLAR ---
 MESSAGES = {
     "uz": {
         "ind": "1️⃣ **Startupingiz qaysi yo'nalishda?**",
@@ -34,7 +33,7 @@ MESSAGES = {
     }
 }
 
-# --- MENYU VA TUGMALAR ---
+# --- MENYU ---
 def get_main_menu():
     kb = ReplyKeyboardBuilder()
     kb.button(text="📊 Startupni Baholash")
@@ -72,26 +71,25 @@ async def process_industry(call: types.CallbackQuery, state: FContext):
 
 @dp.message(ValuationState.entering_revenue)
 async def process_revenue(message: types.Message, state: FContext):
-    if not message.text.isdigit():
+    text = message.text.replace('$', '').replace(',', '').strip()
+    if not text.isdigit():
         return await message.answer("⚠️ Iltimos, faqat raqam kiriting!")
-    await state.update_data(revenue=int(message.text))
+    await state.update_data(revenue=int(text))
     await state.set_state(ValuationState.entering_growth)
     await message.answer(MESSAGES["uz"]["gro"], parse_mode="Markdown")
 
 @dp.message(ValuationState.entering_growth)
 async def process_growth(message: types.Message, state: FContext):
-    if not message.text.isdigit():
+    text = message.text.replace('%', '').strip()
+    if not text.isdigit():
         return await message.answer("⚠️ Iltimos, faqat raqam kiriting!")
     
     data = await state.get_data()
-    growth = int(message.text)
+    growth = int(text)
     rev = data['revenue']
     ind = data['industry']
     
-    # Multiplikatorlar (Startup olami standartlari)
     mult = 18 if ind == "AI / ML" else 12 if ind == "SaaS" else 8
-    
-    # Professional Formula
     valuation = (rev * 12) * mult * (1 + (growth / 100))
     low, high = round(valuation * 0.85), round(valuation * 1.15)
 
@@ -110,23 +108,26 @@ async def mentor(message: types.Message):
 
 @dp.message(F.text == "🚀 Venture Fondlar")
 async def venture(message: types.Message):
-    text = (
-        "🏢 **Venture Fondlar Ro'yxati:**\n\n"
-        "1. **Sturgeon Capital** — Pre-seed/Seed bosqichlar.\n"
-        "2. **UzVC** — Innovatsion local startuplar.\n"
-        "3. **Quest Ventures** — Global bozorga chiqish."
-    )
+    text = "🏢 **Venture Fondlar Ro'yxati:**\n\n1. Sturgeon Capital\n2. UzVC\n3. Quest Ventures"
     await message.answer(text, parse_mode="Markdown")
 
-# --- RENDER HEALTH CHECK ---
-async def handle(request): return web.Response(text="ValuAI Status: Active")
+# --- RENDER SERVERI (O'chib qolmaslik uchun) ---
+async def handle(request):
+    return web.Response(text="ValuAI Status: Active")
+
+async def run_bot():
+    logging.basicConfig(level=logging.INFO)
+    await dp.start_polling(bot)
 
 async def main():
-    app = web.Application(); app.router.add_get("/", handle)
-    runner = web.AppRunner(app); await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", os.environ.get("PORT", "10000"))
-    logging.basicConfig(level=logging.INFO)
-    await asyncio.gather(site.start(), dp.start_polling(bot))
+    app = web.Application()
+    app.router.add_get("/", handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    # Render portini avtomatik aniqlaydi
+    port = int(os.environ.get("PORT", 10000))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await asyncio.gather(site.start(), run_bot())
 
 if __name__ == "__main__":
     asyncio.run(main())
