@@ -8,125 +8,140 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FContext
 from aiohttp import web
 
-# --- KONFIGURATSIYA ---
+# --- 1. SOZLAMALAR ---
 TOKEN = "8622495139:AAHGrAbMgSkDVr6_DZPDPl7V3n0jCZOHRl8"
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
 class ValuationState(StatesGroup):
+    choosing_lang = State()
     choosing_industry = State()
     entering_revenue = State()
     entering_growth = State()
 
-# --- MATNLAR ---
+# --- 2. MULTILINGUAL MATNLAR (4 TA TIL) ---
 MESSAGES = {
     "uz": {
-        "ind": "1️⃣ **Startupingiz qaysi yo'nalishda?**",
-        "rev": "2️⃣ **Oylik sof daromadingiz (Revenue) qancha?** ($ larda yozing)",
-        "gro": "3️⃣ **Oylik o'rtacha o'sish sur'ati (Growth) necha foiz?** (%)",
-        "res": "📊 **VALUAI PROFESSIONAL TAHLILI**\n" + "━" * 15 + "\n"
-               "📂 **Soha:** {ind}\n📈 **O'sish:** {gro}%\n💰 **Oylik daromad:** ${rev:,}\n" + "━" * 15 + "\n"
-               "🚀 **TAXMINIY BOZOR QIYMATI:**\n"
-               "💎 **${low:,} — ${high:,}**\n\n"
-               "💡 *Ushbu qiymat joriy bozor multiplikatorlari asosida hisoblandi.*"
+        "welcome": "Assalomu Alaykum! ValuAI ga xush kelibsiz. Quyidagilardan birini tanlang:",
+        "ind": "1️⃣ **Sohani tanlang:**",
+        "rev": "2️⃣ **Oylik sof daromad ($):**",
+        "gro": "3️⃣ **Oylik o'sish sur'ati (%):**",
+        "res": "📊 **TAHLIL NATIJASI**\n" + "━"*15 + "\n💰 **Qiymat:** ${low:,} — ${high:,}\n" + "━"*15
+    },
+    "ru": {
+        "welcome": "Добро пожаловать в ValuAI! Выберите действие:",
+        "ind": "1️⃣ **Выберите сферу:**",
+        "rev": "2️⃣ **Ежемесячная выручка ($):**",
+        "gro": "3️⃣ **Темп роста (%):**",
+        "res": "📊 **РЕЗУЛЬТАТ ОЦЕНКИ**\n" + "━"*15 + "\n💰 **Стоимость:** ${low:,} — ${high:,}\n" + "━"*15
+    },
+    "en": {
+        "welcome": "Welcome to ValuAI! Please select an option:",
+        "ind": "1️⃣ **Select industry:**",
+        "rev": "2️⃣ **Monthly revenue ($):**",
+        "gro": "3️⃣ **Monthly growth rate (%):**",
+        "res": "📊 **VALUATION RESULT**\n" + "━"*15 + "\n💰 **Value:** ${low:,} — ${high:,}\n" + "━"*15
+    },
+    "tr": {
+        "welcome": "ValuAI'ye hoş geldiniz! Bir seçenek belirleyin:",
+        "ind": "1️⃣ **Sektör seçin:**",
+        "rev": "2️⃣ **Aylık gelir ($):**",
+        "gro": "3️⃣ **Aylık büyüme oranı (%):**",
+        "res": "📊 **DEĞERLEME SONUCU**\n" + "━"*15 + "\n💰 **Değer:** ${low:,} — ${high:,}\n" + "━"*15
     }
 }
 
-# --- MENYU ---
+# --- 3. MENYU VA TUGMALAR ---
 def get_main_menu():
     kb = ReplyKeyboardBuilder()
     kb.button(text="📊 Startupni Baholash")
     kb.button(text="🚀 Venture Fondlar")
     kb.button(text="👨‍🏫 Mentorlik (Firdavs)")
     kb.button(text="📂 Loyihalar (Maestro)")
-    kb.adjust(2, 1)
+    kb.adjust(2, 2)
     return kb.as_markup(resize_keyboard=True)
 
-# --- HANDLERLAR ---
+# --- 4. ASOSIY MANTIQ (HANDLERLAR) ---
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    await message.answer(
-        f"Assalomu Alaykum, **{message.from_user.full_name}**! 👋\n\n"
-        "**ValuAI** — Startup qiymatini aniqlash professional platformasi.",
-        reply_markup=get_main_menu(),
-        parse_mode="Markdown"
-    )
+    await message.answer(MESSAGES["uz"]["welcome"], reply_markup=get_main_menu())
 
 @dp.message(F.text == "📊 Startupni Baholash")
-async def start_process(message: types.Message, state: FContext):
+async def start_valuation(message: types.Message, state: FContext):
+    await state.set_state(ValuationState.choosing_lang)
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🇺🇿 UZ", callback_data="lang_uz")
+    builder.button(text="🇷🇺 RU", callback_data="lang_ru")
+    builder.button(text="🇺🇸 EN", callback_data="lang_en")
+    builder.button(text="🇹🇷 TR", callback_data="lang_tr")
+    await message.answer("Tilni tanlang / Выберите язык / Select language:", reply_markup=builder.as_markup())
+
+@dp.callback_query(ValuationState.choosing_lang)
+async def lang_chosen(call: types.CallbackQuery, state: FContext):
+    lang = call.data.split("_")[1]
+    await state.update_data(lang=lang)
     await state.set_state(ValuationState.choosing_industry)
+    
     builder = InlineKeyboardBuilder()
     for i in ["AI / ML", "Fintech", "SaaS", "E-commerce"]:
         builder.button(text=i, callback_data=f"ind_{i}")
     builder.adjust(2)
-    await message.answer(MESSAGES["uz"]["ind"], reply_markup=builder.as_markup(), parse_mode="Markdown")
+    await call.message.edit_text(MESSAGES[lang]["ind"], reply_markup=builder.as_markup(), parse_mode="Markdown")
 
-@dp.callback_query(ValuationState.choosing_industry, F.data.startswith("ind_"))
-async def process_industry(call: types.CallbackQuery, state: FContext):
+@dp.callback_query(ValuationState.choosing_industry)
+async def ind_chosen(call: types.CallbackQuery, state: FContext):
     industry = call.data.split("_")[1]
+    data = await state.get_data()
+    lang = data['lang']
     await state.update_data(industry=industry)
     await state.set_state(ValuationState.entering_revenue)
-    await call.message.edit_text(f"✅ **Soha:** {industry}\n\n{MESSAGES['uz']['rev']}", parse_mode="Markdown")
+    await call.message.edit_text(f"✅ {industry}\n\n{MESSAGES[lang]['rev']}", parse_mode="Markdown")
 
 @dp.message(ValuationState.entering_revenue)
-async def process_revenue(message: types.Message, state: FContext):
-    text = message.text.replace('$', '').replace(',', '').strip()
-    if not text.isdigit():
-        return await message.answer("⚠️ Iltimos, faqat raqam kiriting!")
-    await state.update_data(revenue=int(text))
+async def rev_entered(message: types.Message, state: FContext):
+    if not message.text.isdigit(): return await message.answer("⚠️ Faqat raqam!")
+    data = await state.get_data()
+    lang = data['lang']
+    await state.update_data(revenue=int(message.text))
     await state.set_state(ValuationState.entering_growth)
-    await message.answer(MESSAGES["uz"]["gro"], parse_mode="Markdown")
+    await message.answer(MESSAGES[lang]["gro"], parse_mode="Markdown")
 
 @dp.message(ValuationState.entering_growth)
-async def process_growth(message: types.Message, state: FContext):
-    text = message.text.replace('%', '').strip()
-    if not text.isdigit():
-        return await message.answer("⚠️ Iltimos, faqat raqam kiriting!")
-    
+async def gro_entered(message: types.Message, state: FContext):
+    if not message.text.isdigit(): return await message.answer("⚠️ Faqat raqam!")
     data = await state.get_data()
-    growth = int(text)
-    rev = data['revenue']
-    ind = data['industry']
-
+    lang, rev, ind = data['lang'], data['revenue'], data['industry']
+    growth = int(message.text)
+    
     mult = 18 if ind == "AI / ML" else 12 if ind == "SaaS" else 8
-    valuation = (rev * 12) * mult * (1 + (growth / 100))
-    low, high = round(valuation * 0.85), round(valuation * 1.15)
+    val = (rev * 12) * mult * (1 + growth/100)
     
     await message.answer(
-        MESSAGES["uz"]["res"].format(ind=ind, gro=growth, rev=rev, low=low, high=high),
-        parse_mode="Markdown",
-        reply_markup=get_main_menu()
+        MESSAGES[lang]["res"].format(low=round(val*0.85), high=round(val*1.15)),
+        reply_markup=get_main_menu(), parse_mode="Markdown"
     )
     await state.clear()
-
-@dp.message(F.text == "👨‍🏫 Mentorlik (Firdavs)")
-async def mentor(message: types.Message):
-    btn = InlineKeyboardBuilder()
-    btn.button(text="📩 Bog'lanish", url="https://t.me/ravshanov_022")
-    await message.answer("Mentorlik uchun murojaat qiling:", reply_markup=btn.as_markup())
 
 @dp.message(F.text == "🚀 Venture Fondlar")
 async def venture(message: types.Message):
     text = "🏢 **Venture Fondlar:**\n1. Sturgeon Capital\n2. UzVC\n3. Quest Ventures"
     await message.answer(text, parse_mode="Markdown")
 
-# --- RENDER WEB SERVER ---
-async def handle(request):
-    return web.Response(text="ValuAI Status: Active")
+@dp.message(F.text == "👨‍🏫 Mentorlik (Firdavs)")
+async def mentor(message: types.Message):
+    await message.answer("Firdavs Ravshanov: @ravshanov_022")
+
+# --- 5. RENDER UCHUN WEB SERVER (24/7 UCHUN) ---
+async def handle(request): return web.Response(text="Bot is Live!")
 
 async def main():
     app = web.Application()
     app.router.add_get("/", handle)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    
+    runner = web.AppRunner(app); await runner.setup()
     port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, "0.0.0.0", port)
     
     logging.basicConfig(level=logging.INFO)
-    print(f"Bot {port}-portda ishlamoqda...")
-    
-    # Bir vaqtda ham serverni, ham botni yurgizish
     await asyncio.gather(site.start(), dp.start_polling(bot))
 
 if __name__ == "__main__":
